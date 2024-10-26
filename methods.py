@@ -1091,18 +1091,23 @@ def dump(env):
 #   scons vsproj=yes vsproj_gen_only=no
 def generate_vs_project(env, original_args, project_name="godot"):
     # Augmented glob_recursive that also fills the dirs argument with traversed directories that have content.
-    def glob_recursive_2(pattern, dirs, node="."):
+    def glob_recursive_2(pattern, dirs, node=".", relative_to=""):
         from SCons import Node
         from SCons.Script import Glob
+        import os
+
+        if relative_to == "":
+            relative_to = os.path.abspath(node)
 
         results = []
         for f in Glob(str(node) + "/*", source=True):
             if type(f) is Node.FS.Dir:
-                results += glob_recursive_2(pattern, dirs, f)
+                results += glob_recursive_2(pattern, dirs, f, relative_to)
         r = Glob(str(node) + "/" + pattern, source=True)
-        if len(r) > 0 and str(node) not in dirs:
+        relative_node = os.path.relpath(str(node), relative_to)
+        if len(r) > 0 and relative_node not in dirs:
             d = ""
-            for part in str(node).split("\\"):
+            for part in relative_node.split("\\"):
                 d += part
                 if d not in dirs:
                     dirs.append(d)
@@ -1209,12 +1214,28 @@ def generate_vs_project(env, original_args, project_name="godot"):
     for file in glob_recursive_2("*.glsl", others_dirs):
         others.append(str(file).replace("/", "\\"))
 
+    custom_modules_dirs = []
+    custom_headers = []
+    custom_sources = []
+
+    custom_modules = original_args.get("custom_modules", "")
+    if custom_modules != "":
+        for file in glob_recursive_2("*.h", custom_modules_dirs, custom_modules):
+            custom_headers.append(str(file).replace("/", "\\"))
+        for file in glob_recursive_2("*.hpp", custom_modules_dirs, custom_modules):
+            custom_headers.append(str(file).replace("/", "\\"))
+        for file in glob_recursive_2("*.cpp", custom_modules_dirs, custom_modules):
+            custom_sources.append(str(file).replace("/", "\\"))
+        for file in glob_recursive_2("*.c", custom_modules_dirs, custom_modules):
+            custom_sources.append(str(file).replace("/", "\\"))
+
     skip_filters = False
     import hashlib
     import json
 
     md5 = hashlib.md5(
-        json.dumps(headers + headers_dirs + sources + sources_dirs + others + others_dirs, sort_keys=True).encode(
+        json.dumps(headers + headers_dirs + sources + sources_dirs + others + others_dirs +
+                   custom_headers + custom_sources + custom_modules_dirs, sort_keys=True).encode(
             "utf-8"
         )
     ).hexdigest()
@@ -1245,6 +1266,9 @@ def generate_vs_project(env, original_args, project_name="godot"):
             filters += f'<Filter Include="Source Files\\{d}"><UniqueIdentifier>{{{str(uuid.uuid4())}}}</UniqueIdentifier></Filter>\n'
         for d in others_dirs:
             filters += f'<Filter Include="Other Files\\{d}"><UniqueIdentifier>{{{str(uuid.uuid4())}}}</UniqueIdentifier></Filter>\n'
+        
+        for d in custom_modules_dirs:
+            filters += f'<Filter Include="Custom Modules\\{d}"></Filter>\n'
 
         filters_template = filters_template.replace("%%FILTERS%%", filters)
 
@@ -1253,12 +1277,23 @@ def generate_vs_project(env, original_args, project_name="godot"):
             filters += (
                 f'<ClInclude Include="{file}"><Filter>Header Files\\{os.path.dirname(file)}</Filter></ClInclude>\n'
             )
+        for file in custom_headers:
+            file_path = os.path.relpath(file, custom_modules)
+            filters += (
+                f'<ClInclude Include="{file}"><Filter>Custom Modules\\{os.path.dirname(file_path)}</Filter></ClInclude>\n'
+            )
+
         filters_template = filters_template.replace("%%INCLUDES%%", filters)
 
         filters = ""
         for file in sources:
             filters += (
                 f'<ClCompile Include="{file}"><Filter>Source Files\\{os.path.dirname(file)}</Filter></ClCompile>\n'
+            )
+        for file in custom_sources:
+            file_path = os.path.relpath(file, custom_modules)
+            filters += (
+                f'<ClCompile Include="{file}"><Filter>Custom Modules\\{os.path.dirname(file_path)}</Filter></ClCompile>\n'
             )
 
         filters_template = filters_template.replace("%%COMPILES%%", filters)
@@ -1363,6 +1398,14 @@ def generate_vs_project(env, original_args, project_name="godot"):
         all_items.append("</None>")
         if file in set_others:
             activeItems.append(file)
+
+    for file in custom_headers:
+        all_items.append(f'<ClInclude Include="{file}">')
+        all_items.append("</ClInclude>")
+
+    for file in custom_sources:
+        all_items.append(f'<ClCompile Include="{file}">')
+        all_items.append("</ClCompile>")
 
     if vs_configuration:
         vsconf = ""
