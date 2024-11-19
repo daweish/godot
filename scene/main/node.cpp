@@ -3248,6 +3248,10 @@ void Node::_set_tree(SceneTree *p_tree) {
 		tree_changed_b = data.tree;
 	}
 
+	// <cwalsh Assuming something with assert>
+	ERR_FAIL_COND_MSG(tree_changed_a && tree_changed_b, "Node moved between two trees!");
+	// </cwalsh Assuming something with assert>
+
 	if (tree_changed_a) {
 		tree_changed_a->tree_changed();
 	}

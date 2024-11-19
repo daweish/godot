@@ -4309,8 +4309,10 @@ bool Main::iteration() {
 	double process_step = advance.process_step;
 	double scaled_step = process_step * time_scale;
 
-	Engine::get_singleton()->_process_step = process_step;
-	Engine::get_singleton()->_physics_interpolation_fraction = advance.interpolation_fraction;
+	// <cwalsh Potential bugfix with Timers when hitting max_physics_steps>
+	//Engine::get_singleton()->_process_step = process_step;
+	//Engine::get_singleton()->_physics_interpolation_fraction = advance.interpolation_fraction;
+	// </cwalsh Potential bugfix with Timers when hitting max_physics_steps>
 
 	uint64_t physics_process_ticks = 0;
 	uint64_t process_ticks = 0;
@@ -4325,6 +4327,11 @@ bool Main::iteration() {
 		process_step -= (advance.physics_steps - max_physics_steps) * physics_step;
 		advance.physics_steps = max_physics_steps;
 	}
+
+	// <cwalsh Potential bugfix with Timers when hitting max_physics_steps>
+	Engine::get_singleton()->_process_step = process_step;
+	Engine::get_singleton()->_physics_interpolation_fraction = advance.interpolation_fraction;
+	// </cwalsh Potential bugfix with Timers when hitting max_physics_steps>
 
 	bool exit = false;
 
