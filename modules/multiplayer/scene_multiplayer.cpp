@@ -54,15 +54,19 @@ _FORCE_INLINE_ void SceneMultiplayer::_profile_bandwidth(const String &p_what, i
 void SceneMultiplayer::_update_status() {
 	MultiplayerPeer::ConnectionStatus status = multiplayer_peer.is_valid() ? multiplayer_peer->get_connection_status() : MultiplayerPeer::CONNECTION_DISCONNECTED;
 	if (last_connection_status != status) {
+		// <cwalsh: fix issue with re-entry calls to set_multiplayer_peer while updating status>
+		const auto prev_last_status = last_connection_status;
+		last_connection_status = status;
 		if (status == MultiplayerPeer::CONNECTION_DISCONNECTED) {
-			if (last_connection_status == MultiplayerPeer::CONNECTION_CONNECTING) {
+			if (prev_last_status == MultiplayerPeer::CONNECTION_CONNECTING) {
 				emit_signal(SNAME("connection_failed"));
 			} else {
 				emit_signal(SNAME("server_disconnected"));
 			}
 			clear();
 		}
-		last_connection_status = status;
+		//last_connection_status = status;
+		// </cwalsh>
 	}
 }
 
@@ -198,7 +202,13 @@ void SceneMultiplayer::set_multiplayer_peer(const Ref<MultiplayerPeer> &p_peer) 
 	if (multiplayer_peer.is_valid()) {
 		multiplayer_peer->disconnect("peer_connected", callable_mp(this, &SceneMultiplayer::_add_peer));
 		multiplayer_peer->disconnect("peer_disconnected", callable_mp(this, &SceneMultiplayer::_del_peer));
+
+		// <cwalsh: prevent clear from missing connection status changes>
+		//clear();
+		const auto saved_connection_status = last_connection_status;
 		clear();
+		last_connection_status = saved_connection_status;
+		// </cwalsh>
 	}
 
 	multiplayer_peer = p_peer;
