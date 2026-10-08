@@ -1973,6 +1973,9 @@ void DisplayServerX11::show_window(DisplayServerEnums::WindowID p_id) {
 	// Setup initial minimize/maximize state.
 	// `_NET_WM_STATE` can be set directly when the window is unmapped.
 	LocalVector<Atom> hints;
+	if (wd.no_focus && p_id == DisplayServerEnums::MAIN_WINDOW_ID) {
+		hints.push_back(XInternAtom(x11_display, "_NET_WM_STATE_BELOW", False));
+	}
 	if (wd.maximized) {
 		hints.push_back(XInternAtom(x11_display, "_NET_WM_STATE_MAXIMIZED_VERT", False));
 		hints.push_back(XInternAtom(x11_display, "_NET_WM_STATE_MAXIMIZED_HORZ", False));
@@ -6504,7 +6507,7 @@ DisplayServerEnums::WindowID DisplayServerX11::_create_window(DisplayServerEnums
 	//   handling decorations and placement.
 	//   On the other hand, focus changes need to be handled manually when this is set.
 	// - save_under is a hint for the WM to keep the content of windows behind to avoid repaint.
-	if (wd.no_focus) {
+	if (wd.no_focus && id != DisplayServerEnums::MAIN_WINDOW_ID) {
 		windowAttributes.override_redirect = True;
 		windowAttributes.save_under = True;
 		valuemask |= CWOverrideRedirect | CWSaveUnder;
@@ -6621,6 +6624,14 @@ DisplayServerEnums::WindowID DisplayServerX11::_create_window(DisplayServerEnums
 		/* set the titlebar name */
 		XStoreName(x11_display, wd.x11_window, "Godot");
 		XSetWMProtocols(x11_display, wd.x11_window, &wm_delete, 1);
+		if (wd.no_focus && id == DisplayServerEnums::MAIN_WINDOW_ID) {
+			// Background main windows must remain managed for normal stacking.
+			XWMHints hints = {};
+			hints.flags = InputHint;
+			hints.input = False;
+			XSetWMHints(x11_display, wd.x11_window, &hints);
+		}
+
 		if (xdnd_aware != None) {
 			XChangeProperty(x11_display, wd.x11_window, xdnd_aware, XA_ATOM, 32, PropModeReplace, (unsigned char *)&xdnd_version, 1);
 		}
@@ -6628,7 +6639,7 @@ DisplayServerEnums::WindowID DisplayServerX11::_create_window(DisplayServerEnums
 		_create_xic(wd);
 		_update_context(wd);
 
-		if (wd.is_popup || wd.no_focus || (wd.embed_parent && !kde5_embed_workaround)) {
+		if (wd.is_popup || (wd.no_focus && id != DisplayServerEnums::MAIN_WINDOW_ID) || (wd.embed_parent && !kde5_embed_workaround)) {
 			// Set Utility type to disable fade animations.
 			Atom type_atom = XInternAtom(x11_display, "_NET_WM_WINDOW_TYPE_UTILITY", False);
 			Atom wt_atom = XInternAtom(x11_display, "_NET_WM_WINDOW_TYPE", False);
